@@ -20,9 +20,9 @@ def ask(query: Query):
     # for chunk in get_ai_response(query.question):
     #     response += chunk
     # return {"answer": response}
-    return {"answer": f"질문 받음: {query.question}"}
+    return {"answer": f"res: {query.question}"}
 
 
 @app.get("/")
 def root():
-    return {"status": "running"}
+    return {"status": "running1"}
