@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from llm import get_ai_response
+import uvicorn
 
 app = FastAPI()
 
