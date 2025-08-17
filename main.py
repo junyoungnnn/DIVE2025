@@ -7,20 +7,12 @@ app = FastAPI()
 class Query(BaseModel):
     question: str
 
-# @app.post("/ask")
-# def ask(query: Query):
-#     response = ""
-#     for chunk in get_ai_response(query.question):
-#         response += chunk
-#     return {"answer": response}
-
 @app.post("/ask")
 def ask(query: Query):
-    # response = ""
-    # for chunk in get_ai_response(query.question):
-    #     response += chunk
-    # return {"answer": response}
-    return {"answer": f"res: {query.question}"}
+    response = ""
+    for chunk in get_ai_response(query.question):
+        response += chunk
+    return {"answer": response}
 
 
 @app.get("/")
