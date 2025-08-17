@@ -10,10 +10,8 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
-from dotenv import load_dotenv
 from config import answer_examples
 
-load_dotenv()
 store = {}
 
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
