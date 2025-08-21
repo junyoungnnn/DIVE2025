@@ -9,8 +9,9 @@ from langchain_pinecone import PineconeVectorStore
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.runnables import RunnablePassthrough
 
-from config import answer_examples
+from config import legal_examples, advice_examples, explanation_examples, dictionary
 
 store = {}
 
@@ -19,6 +20,10 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
         store[session_id] = ChatMessageHistory()
     return store[session_id]
 
+def get_llm(model='gpt-4.1'):
+    llm = ChatOpenAI(model=model)
+    return llm
+
 def get_retriever():
     embedding = OpenAIEmbeddings(model='text-embedding-3-large')
     index_name = 'dive2025home'
@@ -26,10 +31,7 @@ def get_retriever():
     retriever = database.as_retriever(search_kwargs={'k': 4})
     return retriever
 
-def get_history_retriever():
-    llm = get_llm()
-    retriever = get_retriever()
-    
+def get_history_aware_retriever(llm, retriever):
     contextualize_q_system_prompt = (
         "Given a chat history and the latest user question "
         "which might reference context in the chat history, "
@@ -37,7 +39,6 @@ def get_history_retriever():
         "without the chat history. Do NOT answer the question, "
         "just reformulate it if needed and otherwise return it as is."
     )
-
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", contextualize_q_system_prompt),
@@ -45,174 +46,156 @@ def get_history_retriever():
             ("human", "{input}"),
         ]
     )
-    
     history_aware_retriever = create_history_aware_retriever(
         llm, retriever, contextualize_q_prompt
     )
     return history_aware_retriever
 
-def get_llm(model='gpt-4.1'):
-    llm = ChatOpenAI(model=model)
-    return llm
-
+# 1단계: 질문을 법률 용어로 변환
 def get_dictionary_chain():
 
-    dictionary = [
-    # 당사자
-    "집주인 -> 임대인",
-    "건물주 -> 임대인",
-    "세입자 -> 임차인",
-    "세든 사람 -> 임차인",
-    "전세 사는 사람 -> 임차인",
-    "월세 사는 사람 -> 임차인",
-    "입주자 -> 임차인",
-    "새 집주인 -> 양수인",
-    "집 산 사람 -> 양수인",
-
-    # 계약
-    "전세계약 -> 임대차",
-    "월세계약 -> 임대차",
-    "집 계약 -> 임대차",
-    "전세 -> 보증금",
-    "전세금 -> 보증금",
-    "전세 보증금 -> 보증금",
-    "월세 -> 차임",
-    "집세 -> 차임",
-    "보증금 -> 임대차 보증금",
-    "집 -> 주택",
-    "아파트 -> 주택",
-    "빌라 -> 주택",
-    "원룸 -> 주택",
-    "재계약 -> 계약갱신",
-    "계약 연장 -> 계약갱신",
-    "자동 연장 -> 묵시적 갱신",
-    "계약 자동 연장 -> 묵시적 갱신",
-    "계약 만료 -> 임대차기간 만료",
-    "집 빌려 쓰기 -> 임대차",
-    "집 넘겨받다 -> 주택 인도",
-    "전입신고 -> 주민등록",
-    "계약 해지 통보 -> 계약해지 통지",
-    "전전세 -> 전대",
-    "관리비 -> 공과금",
-    "근저당 -> 담보물권",
-
-    # 권리·보장
-    "세입자 권리 -> 대항력",
-    "집주인 바뀌어도 계약 유지 -> 임대인의 지위 승계",
-    "날짜 도장 -> 확정일자",
-    "보증금 먼저 돌려받는 권리 -> 우선변제권",
-    "보증금 먼저 받기 -> 우선변제권",
-    "작은 보증금 보호 -> 소액보증금 보호",
-    "임차권 등기 -> 임차권등기명령",
-    "보증금 못 받았을 때 하는 등기 -> 임차권등기명령",
-    "집 등기부에 전세 기록 -> 임대차등기",
-    "보증금 반환 요구권 -> 보증금반환청구권",
-    "보증금 돌려받기 -> 보증금의 회수",
-    "보증금 반환 -> 보증금의 회수",
-    "계약 갱신 요구 -> 계약갱신요구권",
-    "전입신고와 확정일자 -> 대항요건과 확정일자",
-
-    # 상황/사건
-    "집주인이 바뀌었을 때 -> 임차주택의 양도",
-    "집이 팔렸을 때 -> 임차주택의 양도",
-    "집이 경매로 넘어가다 -> 주택 경매",
-    "집이 경매에 넘어갔을 때 -> 경매에 의한 임차권의 소멸",
-    "집 압류 -> 경매 진행",
-    "임차권 소멸 -> 경매로 인한 임차권 소멸",
-
-    # 분쟁 및 절차
-    "보증금 반환 소송 -> 보증금반환청구소송",
-    "소액사건 소송 -> 소액사건심판법 준용",
-    "분쟁조정위원회 -> 주택임대차분쟁조정위원회",
-    "법률구조공단 조정 -> 대한법률구조공단 조정위원회",
-    "분쟁조정 -> 조정절차",
-    "합의서 -> 조정서",
-
-    # 특수 규정
-    "미등기 전세 -> 미등기 전세 (보증금 간주)",
-    "주택도시기금 전세 -> 전세임대주택 지원",
-    "법인 직원 주거용 전세 -> 법인 임대차",
-    "조정 결과 효력 -> 집행권원",
-
-    # 기타
-    "집 담보 대출 -> 저당권 설정",
-    "은행이 먼저 가져간다 -> 우선변제권 행사",
-    "세금 체납 조회 -> 납세증명서",
-    "세입자 보호법 -> 주택임대차보호법",
-    "강제 규정 -> 강행규정",
-    "법 어기면 무효 -> 임차인에게 불리한 약정은 무효"
-]
-    
     llm = get_llm()
     prompt = ChatPromptTemplate.from_template(f"""
-        사용자의 질문을 보고, 우리의 사전을 참고해서 사용자의 질문을 변경해주세요.
-        만약 변경할 필요가 없다고 판단된다면, 사용자의 질문을 변경하지 않아도 됩니다.
-        그런 경우에는 질문만 리턴해주세요
+        사용자의 질문을 보고, 아래 사전을 참고해서 질문에 사용된 일상 용어를 법률 용어로 변경해주세요.
+        질문의 의미가 바뀌지 않는 선에서 자연스럽게 수정하고, 수정된 질문만 간결하게 반환해주세요.
+        만약 수정할 필요가 없다고 판단되면, 원래 질문을 그대로 반환해주세요.
+
         사전: {dictionary}
         
         질문: {{question}}
     """)
+    return prompt | llm | StrOutputParser()
 
-    dictionary_chain = prompt | llm | StrOutputParser()
+# 2단계: 질문 의도 분류기
+def get_intent_classifier_chain():
+    llm = get_llm()
     
-    return dictionary_chain
+    intent_classifier_prompt_text = """
+    당신은 사용자의 질문 의도를 4가지 카테고리로 분류하는 AI 어시스턴트입니다.
+    사용자의 질문을 읽고, 아래 카테고리 중 가장 적합한 하나만 골라 그 이름만 답변해주세요.
+    다른 설명은 절대 추가하지 마세요.
 
-def get_rag_chain():
+    ---
+    [카테고리 설명]
+    1. legal_question (법률 질문): 법률 용어, 조항, 절차 등 법 자체에 대한 질문.
+    2. prediction_explanation_question (예측 근거 질문): '위험도 점수'의 이유나 근거에 대한 질문.
+    3. actionable_advice_question (행동 요령 질문): '어떻게 해야 하는지' 구체적인 행동 방법을 묻는 질문.
+    4. irrelevant_question (관련 없는 질문): 위 세 가지에 속하지 않는 모든 질문.
+    ---
+
+    [사용자 질문]
+    {question}
+
+    [분류]
+    """
+    prompt = ChatPromptTemplate.from_template(intent_classifier_prompt_text)
+    return prompt | llm | StrOutputParser()
+
+# 3단계: 역할별 전문가 체인 (Specialists)
+
+def get_base_rag_chain(llm, retriever, system_prompt_template, fewshot_example):
+    # FewShot을 포함한 범용 RAG 체인을 생성하는 함수
+    history_aware_retriever = get_history_aware_retriever(llm, retriever)
+    
+    example_prompt = ChatPromptTemplate.from_messages([("human", "{input}"), ("ai", "{answer}")])
+    few_shot_prompt = FewShotChatMessagePromptTemplate(
+        example_prompt=example_prompt,
+        examples=fewshot_example,
+    )
+    
+    qa_prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt_template),
+        few_shot_prompt,
+        MessagesPlaceholder("chat_history"),
+        ("human", "{input}"),
+    ])
+    
+    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
+    return create_retrieval_chain(history_aware_retriever, question_answer_chain)
+
+def get_legal_expert_chain():
+    llm = get_llm()
+    retriever = get_retriever()
+    system_prompt = (
+        "당신은 주택임대차보호법 전문가입니다. 사용자의 주택임대차보호법에 관한 질문에 답변해주세요.\n"
+        "아래에 제공된 문서를 활용해서 답변해주시고, 답변을 알 수 없다면 모른다고 답변해주세요.\n"
+        "답변을 제공할 때는 '주택임대차보호법(제XX조)에 따르면,' 이라고 시작하면서 답변해주시고, 2-3 문장 정도의 짧은 내용으로 답변해주세요.\n\n"
+        "{context}"
+    )
+    return get_base_rag_chain(llm, retriever, system_prompt, legal_examples)
+
+def get_action_advice_expert_chain():
+    llm = get_llm()
+    retriever = get_retriever()
+    system_prompt = (
+        "당신은 전세 계약 경험이 많은 선배입니다. 아래에 제공된 법률 문서를 참고하여, 사용자가 처한 상황에서 어떤 행동을 해야 할지 질문에 맞춰 단계별로 알려주세요.\n"
+        "사용자가 따라 하기 쉽도록, 답변을 번호나 글머리 기호를 사용한 '체크리스트' 또는 '단계별 절차' 형식으로 제공해주세요.\n"
+        "딱딱한 법률 용어보다는 부드럽고 실용적인 조언 형태로 작성해주세요.\n\n"
+        "{context}"
+    )
+    return get_base_rag_chain(llm, retriever, system_prompt, advice_examples)
+
+def get_explanation_expert_chain():
     llm = get_llm()
     example_prompt = ChatPromptTemplate.from_messages(
         [
-            ("human", "{input}"),
+            ("human", "{question}"),
             ("ai", "{answer}"),
         ]
     )
     few_shot_prompt = FewShotChatMessagePromptTemplate(
         example_prompt=example_prompt,
-        examples=answer_examples,
+        examples=explanation_examples,
     )
-    system_prompt = (
-        "당신은 주택임대차보호법 전문가입니다. 사용자의 주택임대차보호법에 관한 질문에 답변해주세요"
-        "아래에 제공된 문서를 활용해서 답변해주시고"
-        "답변을 알 수 없다면 모른다고 답변해주세요"
-        "답변을 제공할 때는 주택임대차보호법 (XX조)에 따르면 이라고 시작하면서 답변해주시고"
-        "2-3 문장정도의 짧은 내용의 답변을 원합니다"
-        "\n\n"
-        "{context}"
-    )
-    
-    qa_prompt = ChatPromptTemplate.from_messages(
+    final_prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", system_prompt),
+            ("system",
+             "당신은 전세 위험 분석 데이터를 설명해주는 친절한 데이터 분석가입니다. 아래에 제공된 [예측 결과 데이터]를 보고, 사용자가 그 이유에 대해 알기 쉽게 설명해주세요.\n"
+             "전문 용어보다는 쉬운 말로 풀어서 설명하고, 어떤 요인이 점수에 가장 큰 영향을 미쳤는지 설명해주세요.\n"
+             "각 요인이 왜 위험도를 높이거나 낮추는지 간단한 이유를 덧붙여주세요. (예: '초기 LTV가 높은 것은 집값 하락 시 보증금을 돌려받지 못할 위험이 크다는 의미입니다.')"
+            ),
             few_shot_prompt,
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
+            ("human", "[예측 결과 데이터]\n{question}"),
         ]
     )
-    history_aware_retriever = get_history_retriever()
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
     
+    return final_prompt | llm | StrOutputParser()
+
+# 4단계: 메인 로직
+
+def get_ai_response(user_message):
+    # 1. 질문을 법률 용어로 변환
+    dictionary_chain = get_dictionary_chain()
+    normalized_question = dictionary_chain.invoke({"question": user_message})
+    print(f"[DEBUG] 원본 질문: {user_message}")
+    print(f"[DEBUG] 수정된 질문: {normalized_question}")
+    
+    # 2. 질문 의도 분류
+    intent_classifier = get_intent_classifier_chain()
+    intent = intent_classifier.invoke({"question": normalized_question}) # 분류는 변환된 질문으로
+    print(f"[DEBUG] 감지된 질문 의도: {intent}")
+
+    # 3. 의도에 따라 다른 체인 실행
+    if intent == "legal_question":
+        chain = get_legal_expert_chain()
+    elif intent == "actionable_advice_question":
+        chain = get_action_advice_expert_chain()
+    elif intent == "prediction_explanation_question":
+        chain = get_explanation_expert_chain()
+    else: # irrelevant_question
+        return iter(["죄송합니다, 저는 주택 임대차 계약과 관련된 법률 및 위험도 분석에 대해서만 답변을 드릴 수 있어요."])
+
+    # RAG 체인에 메모리 기능 추가
     conversational_rag_chain = RunnableWithMessageHistory(
-        rag_chain,
+        chain,
         get_session_history,
         input_messages_key="input",
         history_messages_key="chat_history",
         output_messages_key="answer",
     ).pick('answer')
     
-    return conversational_rag_chain
-
-def get_ai_response(user_message):
-    dictionary_chain = get_dictionary_chain()
-    rag_chain = get_rag_chain()
-    home_chain = {"input": dictionary_chain} | rag_chain
-    ai_response = home_chain.stream(
-        {
-            "question": user_message
-        },
-        config={
-            "configurable": {"session_id": "abc123"}
-        },
+    # 스트리밍 답변 반환
+    return conversational_rag_chain.stream(
+        {"input": normalized_question},
+        config={"configurable": {"session_id": 'abc123'}},
     )
-
-    return ai_response

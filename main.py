@@ -17,4 +17,4 @@ def ask(query: Query):
 
 @app.get("/")
 def root():
-    return {"status": "running1"}
+    return {"status": "running2"}
