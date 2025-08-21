@@ -11,7 +11,7 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.runnables import RunnablePassthrough
 
-from config import legal_examples, advice_examples, explanation_examples, dictionary
+from config import legal_examples, advice_examples, explanation_examples
 
 store = {}
 
@@ -55,6 +55,14 @@ def get_history_aware_retriever(llm, retriever):
 def get_dictionary_chain():
 
     llm = get_llm()
+
+    dictionary = [
+
+    "집주인 -> 임대인",
+    "건물주 -> 임대인",
+    "세입자 -> 임차인",
+]
+
     prompt = ChatPromptTemplate.from_template(f"""
         사용자의 질문을 보고, 아래 사전을 참고해서 질문에 사용된 일상 용어를 법률 용어로 변경해주세요.
         질문의 의미가 바뀌지 않는 선에서 자연스럽게 수정하고, 수정된 질문만 간결하게 반환해주세요.
@@ -152,7 +160,7 @@ def get_explanation_expert_chain():
             ("system",
              "당신은 전세 위험 분석 데이터를 설명해주는 친절한 데이터 분석가입니다. 아래에 제공된 [예측 결과 데이터]를 보고, 사용자가 그 이유에 대해 알기 쉽게 설명해주세요.\n"
              "전문 용어보다는 쉬운 말로 풀어서 설명하고, 어떤 요인이 점수에 가장 큰 영향을 미쳤는지 설명해주세요.\n"
-             "각 요인이 왜 위험도를 높이거나 낮추는지 간단한 이유를 덧붙여주세요. (예: '초기 LTV가 높은 것은 집값 하락 시 보증금을 돌려받지 못할 위험이 크다는 의미입니다.')"
+             "각 요인이 왜 위험도를 높이거나 낮추는지 간단한 이유를 덧붙여주세요."
             ),
             few_shot_prompt,
             ("human", "[예측 결과 데이터]\n{question}"),
