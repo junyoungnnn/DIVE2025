@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from llm import get_ai_response
 
-app = FastAPI(title="ÁÖÅÃÀÓ´ëÂ÷¹ı Ãªº¿ API")
+app = FastAPI(title="ì£¼íƒì„ëŒ€ì°¨ë²• ì±—ë´‡ API")
 
 class Query(BaseModel):
     question: str
