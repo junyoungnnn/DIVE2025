@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from llm import get_ai_response
 
-app = FastAPI()
+app = FastAPI(title="ÁÖÅÃÀÓ´ëÂ÷¹ı Ãªº¿ API")
 
 class Query(BaseModel):
     question: str
@@ -17,4 +17,4 @@ def ask(query: Query):
 
 @app.get("/")
 def root():
-    return {"status": "running3"}
+    return {"status": "running5"}

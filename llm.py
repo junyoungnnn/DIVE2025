@@ -11,7 +11,7 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.runnables import RunnablePassthrough
 
-from config import legal_examples, advice_examples, explanation_examples
+from config import legal_examples, advice_examples, term_examples
 
 store = {}
 
@@ -86,8 +86,8 @@ def get_intent_classifier_chain():
     ---
     [카테고리 설명]
     1. legal_question (법률 질문): 법률 용어, 조항, 절차 등 법 자체에 대한 질문.
-    2. prediction_explanation_question (예측 근거 질문): '위험도 점수'의 이유나 근거에 대한 질문.
-    3. actionable_advice_question (행동 요령 질문): '어떻게 해야 하는지' 구체적인 행동 방법을 묻는 질문.
+    2. actionable_advice_question (행동 요령 질문): '어떻게 해야 하는지' 구체적인 행동 방법을 묻는 질문.
+    3. term_question (용어 설명 질문): '임대인', '확정일자' 등 특정 용어의 뜻을 묻는 질문.
     4. irrelevant_question (관련 없는 질문): 위 세 가지에 속하지 않는 모든 질문.
     ---
 
@@ -143,29 +143,16 @@ def get_action_advice_expert_chain():
     )
     return get_base_rag_chain(llm, retriever, system_prompt, advice_examples)
 
-def get_explanation_expert_chain():
+def get_term_expert_chain():
     llm = get_llm()
-    example_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("human", "{question}"),
-            ("ai", "{answer}"),
-        ]
+    retriever = get_retriever()
+    system_prompt = (
+        "당신은 법률 용어를 아주 쉽게 설명해주는 친절한 선배입니다. 사회초년생의 눈높이에 맞춰, 어려운 법률 용어를 일상적인 예시나 비유를 들어 설명해주세요.\n"
+        "아래에 제공된 참고 자료를 활용하되, 딱딱한 법률 조항을 나열하기보다는 핵심 의미를 풀어서 전달하는 데 집중해주세요.\n"
+        "답변은 2-4 문장 정도로 간결하고 명확하게 작성해주세요.\n\n"
+        "{context}"
     )
-    few_shot_prompt = FewShotChatMessagePromptTemplate(
-        example_prompt=example_prompt,
-        examples=explanation_examples,
-    )
-    final_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system",
-             "당신은 전세 위험 분석 데이터를 설명해주는 친절한 데이터 분석가입니다. 아래에 제공된 [예측 결과 데이터]를 보고, {examples} 형식을 참고하여 설명해주세요.\n"
-            ),
-            few_shot_prompt,
-            ("human", "[예측 결과 데이터]\n{question}"),
-        ]
-    )
-    
-    return final_prompt | llm | StrOutputParser()
+    return get_base_rag_chain(llm, retriever, system_prompt, term_examples)
 
 # 4단계: 메인 로직
 
@@ -173,21 +160,18 @@ def get_ai_response(user_message):
     # 1. 질문을 법률 용어로 변환
     dictionary_chain = get_dictionary_chain()
     normalized_question = dictionary_chain.invoke({"question": user_message})
-    print(f"[DEBUG] 원본 질문: {user_message}")
-    print(f"[DEBUG] 수정된 질문: {normalized_question}")
     
     # 2. 질문 의도 분류
     intent_classifier = get_intent_classifier_chain()
     intent = intent_classifier.invoke({"question": normalized_question}) # 분류는 변환된 질문으로
-    print(f"[DEBUG] 감지된 질문 의도: {intent}")
 
     # 3. 의도에 따라 다른 체인 실행
     if intent == "legal_question":
         chain = get_legal_expert_chain()
     elif intent == "actionable_advice_question":
         chain = get_action_advice_expert_chain()
-    elif intent == "prediction_explanation_question":
-        chain = get_explanation_expert_chain()
+    elif intent == "term_question":
+        chain = get_term_expert_chain()
     else: # irrelevant_question
         return iter(["죄송합니다, 저는 주택 임대차 계약과 관련된 법률 및 위험도 분석에 대해서만 답변을 드릴 수 있어요."])
 
