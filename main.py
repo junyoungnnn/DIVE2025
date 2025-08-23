@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from llm import get_ai_response
 from fastapi.middleware.cors import CORSMiddleware
 
+app = FastAPI(title="주택임대차법 챗봇 API")
+
 # --- CORS 설정 ---
 ALLOWED_ORIGINS = [
     "http://127.0.0.1:5500",
@@ -16,8 +18,6 @@ app.add_middleware(
     allow_methods=["*"],   # 필요 시 ["GET","POST","OPTIONS"]로 제한 가능
     allow_headers=["*"],   # 필요 시 ["Content-Type","Authorization"] 등으로 제한 가능
 )
-
-app = FastAPI(title="주택임대차법 챗봇 API")
 
 class Query(BaseModel):
     question: str
