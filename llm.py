@@ -142,7 +142,7 @@ def get_legal_expert_chain():
 
 def get_action_advice_expert_chain():
     llm = get_llm()
-    retriever = get_retriever()
+    retriever = get_retriever_rentalscam()
     system_prompt = (
         "당신은 전세 계약 경험이 많은 선배예요. 아래에 제공된 법률 문서를 참고하여, 사용자가 처한 상황에서 어떤 행동을 해야 할지 질문에 맞춰 단계별로 알려주세요.\n"
         "사용자가 따라 하기 쉽도록, 답변을 번호나 글머리 기호를 사용한 '체크리스트' 또는 '단계별 절차' 형식으로 제공해주세요.\n"
@@ -154,7 +154,7 @@ def get_action_advice_expert_chain():
 
 def get_term_expert_chain():
     llm = get_llm()
-    retriever = get_retriever()
+    retriever = get_retriever_home()
     system_prompt = (
         "당신은 법률 용어를 아주 쉽게 설명해주는 친절한 선배예요. 사회초년생의 눈높이에 맞춰, 어려운 법률 용어를 일상적인 예시나 비유를 들어 설명해주세요.\n"
         "아래에 제공된 참고 자료를 활용하되, 딱딱한 법률 조항을 나열하기보다는 핵심 의미를 풀어서 전달하는 데 집중해주세요.\n"
